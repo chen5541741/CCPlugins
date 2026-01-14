@@ -1,0 +1,20 @@
+{
+  "name": "AutoAnalysis",
+  "version": "0.1.0",
+  "description": "AutoAnalysis - A Claude Code plugin for automated penetration testing log analysis and CTF writeup analysis",
+  "author": {
+    "name": "nearl"
+  },
+  "keywords": [
+    "analysis",
+    "automation",
+    "penetration testing",
+    "pentest",
+    "CTF",
+    "security",
+    "writeup",
+    "log analysis",
+    "attack flow",
+    "vulnerability assessment"
+  ]
+}

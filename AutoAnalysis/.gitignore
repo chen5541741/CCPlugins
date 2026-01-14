@@ -1,0 +1,14 @@
+# Local settings
+.claude/*.local.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log

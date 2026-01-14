@@ -1,0 +1,22 @@
+{
+  "name": "MSPlugins",
+  "description": "MSPlugins",
+  "version": "0.1.0",
+  "owner": {
+    "name": "nearl"
+  },
+  "plugins": [
+    {
+      "name": "AutoAnalysis",
+      "version": "0.1.0",
+      "source": "./AutoAnalysis",
+      "description": "AutoAnalysis - A Claude Code plugin for automated penetration testing log analysis and CTF writeup analysis"
+    },
+    {
+      "name": "ThirdPart",
+      "version": "0.1.0",
+      "source": "./ThirdPart",
+      "description": "ThirdPart - 第三方skill集合"
+    }
+  ]
+}
