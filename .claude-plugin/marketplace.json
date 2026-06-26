@@ -13,12 +13,6 @@
       "description": "AutoAnalysis - A Claude Code plugin for automated penetration testing log analysis and CTF writeup analysis"
     },
     {
-      "name": "ThirdPart",
-      "version": "0.1.0",
-      "source": "./ThirdPart",
-      "description": "ThirdPart - 第三方skill集合"
-    },
-    {
       "name": "kook-notify",
       "version": "0.1.0",
       "source": "./kook-notify",
