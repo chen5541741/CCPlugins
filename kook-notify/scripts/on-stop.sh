@@ -16,7 +16,7 @@ kook_load_env
 
 [ "${KOOK_NOTIFY:-1}" = "0" ] && exit 0
 
-threshold="${KOOK_NOTIFY_THRESHOLD:-60}"
+threshold="${KOOK_NOTIFY_THRESHOLD:-300}"
 
 input="$(cat)"
 session_id="$(printf '%s' "$input" | jq -r '.session_id // empty' | tr -d '\r')"
