@@ -17,6 +17,12 @@
       "version": "0.1.0",
       "source": "./kook-notify",
       "description": "kook-notify - 通过 KOOK Bot 把 Claude Code 长任务完成、需要注意等事件单向推送到频道或私聊"
+    },
+    {
+      "name": "config-statusline",
+      "version": "0.1.0",
+      "source": "./config-statusline",
+      "description": "config-statusline - 一键安装本 plugin 自带的 statusline 脚本到 Claude Code，封装 /statusline 标准配置流程"
     }
   ]
 }
