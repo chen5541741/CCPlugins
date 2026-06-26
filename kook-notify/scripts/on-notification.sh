@@ -5,27 +5,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for f in \
-  "${CLAUDE_PROJECT_DIR:-}/.env" \
-  "${CLAUDE_PLUGIN_ROOT:-}/.env" \
-  "$SCRIPT_DIR/../.env"
-do
-  [ -n "$f" ] && [ -f "$f" ] || continue
-  set -a
-  # shellcheck disable=SC1090
-  source "$f"
-  set +a
-  break
-done
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_load_env.sh"
+kook_load_env
 
 [ "${KOOK_NOTIFY:-1}" = "0" ] && exit 0
 
 input="$(cat)"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // empty')"
-notif_msg="$(printf '%s' "$input" | jq -r '.message // empty')"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' | tr -d '\r')"
+notif_msg="$(printf '%s' "$input" | jq -r '.message // empty' | tr -d '\r')"
 [ -z "$cwd" ] && cwd="$PWD"
 
-proj="$(basename "$cwd")"
+# 同时按 / 和 \ 切，兼容 Windows 反斜杠路径
+proj="${cwd##*[\\/]}"
+[ -z "$proj" ] && proj="$(basename "$cwd")"
 msg="[${proj}] Claude Code 需要你的注意"
 if [ -n "$notif_msg" ]; then
   msg="${msg} · ${notif_msg}"

@@ -9,25 +9,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# .env 加载（与 push.sh 一致的优先级）：项目 > plugin 根 > 脚本目录
-for f in \
-  "${CLAUDE_PROJECT_DIR:-}/.env" \
-  "${CLAUDE_PLUGIN_ROOT:-}/.env" \
-  "$SCRIPT_DIR/../.env"
-do
-  [ -n "$f" ] && [ -f "$f" ] || continue
-  set -a
-  # shellcheck disable=SC1090
-  source "$f"
-  set +a
-  break
-done
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_load_env.sh"
+kook_load_env
 
 # 总开关：KOOK_NOTIFY=0 时彻底不工作
 [ "${KOOK_NOTIFY:-1}" = "0" ] && exit 0
 
 input="$(cat)"
-session_id="$(printf '%s' "$input" | jq -r '.session_id // empty')"
+session_id="$(printf '%s' "$input" | jq -r '.session_id // empty' | tr -d '\r')"
 [ -z "$session_id" ] && exit 0
 
 date +%s > "/tmp/cc-turn-${session_id}.start"

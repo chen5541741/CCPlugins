@@ -19,6 +19,8 @@
 #   2) $CLAUDE_PROJECT_DIR/.env      （Claude Code 注入的项目根，作为 hook 时一般等于 1）
 #   3) $CLAUDE_PLUGIN_ROOT/.env      （plugin 安装目录，作为所有项目共享的全局回退）
 #   4) $SCRIPT_DIR/.env              （脚本所在目录，本仓库自测/兜底）
+#   5) $SCRIPT_DIR/../.env           （仓库根 .env，开发自测兜底）
+# 加载逻辑见 _load_env.sh，hook 脚本（on-*.sh）走同一套。
 
 set -euo pipefail
 
@@ -57,44 +59,10 @@ die() {
 }
 
 # ----- 加载 .env -----
-# 后加载的不覆盖先加载的，以模拟 python-dotenv 的 override=False。
-load_env_file() {
-  local f="$1"
-  [ -f "$f" ] || return 0
-  local line key val
-  while IFS= read -r line; do
-    case "$line" in
-      ''|\#*) continue ;;
-      *=*)
-        key="${line%%=*}"
-        val="${line#*=}"
-        # 去掉首尾可能存在的成对引号
-        case "$val" in
-          \"*\") val="${val#\"}"; val="${val%\"}" ;;
-          \'*\') val="${val#\'}"; val="${val%\'}" ;;
-        esac
-        # 仅当当前 env 未设置（或为空）时才填入
-        if [ -z "${!key:-}" ]; then
-          export "$key=$val"
-        fi
-        ;;
-    esac
-  done < "$f"
-}
-
-# 候选 .env 路径列表（顺序即优先级），去重后逐个加载
-_env_candidates=()
-_env_candidates+=("$PWD/.env")
-[ -n "${CLAUDE_PROJECT_DIR:-}" ] && _env_candidates+=("$CLAUDE_PROJECT_DIR/.env")
-[ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && _env_candidates+=("$CLAUDE_PLUGIN_ROOT/.env")
-_env_candidates+=("$SCRIPT_DIR/.env")
-
-_seen=""
-for f in "${_env_candidates[@]}"; do
-  case "$_seen" in *"|$f|"*) continue ;; esac
-  _seen="$_seen|$f|"
-  load_env_file "$f"
-done
+# 加载逻辑统一抽到 _load_env.sh，hook 脚本也走这套。
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_load_env.sh"
+kook_load_env
 
 # ----- 参数解析 -----
 TARGET_TYPE=""

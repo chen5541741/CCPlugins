@@ -1,0 +1,14 @@
+# 强制 .sh 在 Windows 也保持 LF 行尾。
+# Git autocrlf=true 默认会把 .sh 转成 CRLF，bash 见 \r 即崩。
+*.sh text eol=lf
+
+# 同理保护其他 Unix 风格脚本与配置文件
+*.bash text eol=lf
+
+# 让 .ps1 在 Windows clone 时保持 CRLF（PowerShell 习惯）
+*.ps1 text eol=crlf
+
+# 二进制类型显式声明，避免被当文本处理
+*.png binary
+*.jpg binary
+*.ico binary

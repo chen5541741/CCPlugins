@@ -9,26 +9,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for f in \
-  "${CLAUDE_PROJECT_DIR:-}/.env" \
-  "${CLAUDE_PLUGIN_ROOT:-}/.env" \
-  "$SCRIPT_DIR/../.env"
-do
-  [ -n "$f" ] && [ -f "$f" ] || continue
-  set -a
-  # shellcheck disable=SC1090
-  source "$f"
-  set +a
-  break
-done
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_load_env.sh"
+kook_load_env
 
 [ "${KOOK_NOTIFY:-1}" = "0" ] && exit 0
 
 threshold="${KOOK_NOTIFY_THRESHOLD:-60}"
 
 input="$(cat)"
-session_id="$(printf '%s' "$input" | jq -r '.session_id // empty')"
-cwd="$(printf '%s' "$input" | jq -r '.cwd // empty')"
+session_id="$(printf '%s' "$input" | jq -r '.session_id // empty' | tr -d '\r')"
+cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' | tr -d '\r')"
 [ -z "$cwd" ] && cwd="$PWD"
 
 start_file="/tmp/cc-turn-${session_id}.start"
@@ -55,7 +46,9 @@ else
   dur="${elapsed}s"
 fi
 
-proj="$(basename "$cwd")"
+# 同时按 / 和 \ 切，兼容 Windows 反斜杠路径
+proj="${cwd##*[\\/]}"
+[ -z "$proj" ] && proj="$(basename "$cwd")"
 msg="[${proj}] Claude Code 完成 · ${dur}"
 
 exec "$SCRIPT_DIR/push.sh" "$msg"
