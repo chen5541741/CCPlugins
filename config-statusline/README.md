@@ -50,14 +50,23 @@ Claude Code 的 `statusLine.command` 字段**不支持** `${CLAUDE_PLUGIN_ROOT}`
 
 ## 输出预览
 
+短任务（不足 1 小时）：
+
 ```
 [claude-opus-4-8] 📁 D:/rin/github/CCPlugins | 🌿 main
 ████████░░ 80% | $1.23 | ⏱️ 12m 34s
 ```
 
+长任务（超过 1 小时，自动加 `Xh` 段）：
+
+```
+[claude-opus-4-8] 📁 D:/rin/github/CCPlugins | 🌿 main
+████████░░ 80% | $5.42 | ⏱️ 2h 15m 3s
+```
+
 - context 进度条：≥70% 黄、≥90% 红
 - 费用累计为当前 session
-- 耗时为 Claude Code 报告的 `cost.total_duration_ms`
+- 耗时为 Claude Code 报告的 `cost.total_duration_ms`；超过 1 小时才显示小时段
 
 ## 自定义脚本
 

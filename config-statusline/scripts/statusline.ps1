@@ -1,4 +1,4 @@
-# Claude Code statusline - Windows / PowerShell 版本
+﻿# Claude Code statusline - Windows / PowerShell 版本
 # 与 statusline.sh 输出格式一致，不依赖 jq；git 可选。
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -31,8 +31,11 @@ $filled = [math]::Floor($pct / 10)
 $empty  = 10 - $filled
 $bar    = ('█' * $filled) + ('░' * $empty)
 
-$mins = [math]::Floor($durationMs / 60000)
-$secs = [math]::Floor(($durationMs % 60000) / 1000)
+$totalSec = [math]::Floor($durationMs / 1000)
+$hours    = [math]::Floor($totalSec / 3600)
+$mins     = [math]::Floor(($totalSec % 3600) / 60)
+$secs     = $totalSec % 60
+$dur = if ($hours -gt 0) { "${hours}h ${mins}m ${secs}s" } else { "${mins}m ${secs}s" }
 
 # Git 分支（可选 —— 没装 git 或 dir 不是 repo 则跳过）
 $branch = ""
@@ -47,4 +50,4 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 $costFmt = ('${0:F2}' -f $cost)
 
 Write-Host "$CYAN[$model]$RST 📁 $dir$branch"
-Write-Host "$barColor$bar$RST ${pct}% | $YEL$costFmt$RST | ⏱️ ${mins}m ${secs}s"
+Write-Host "$barColor$bar$RST ${pct}% | $YEL$costFmt$RST | ⏱️ $dur"

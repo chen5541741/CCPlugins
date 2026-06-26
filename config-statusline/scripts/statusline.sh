@@ -18,11 +18,19 @@ FILLED=$((PCT / 10)); EMPTY=$((10 - FILLED))
 printf -v FILL "%${FILLED}s"; printf -v PAD "%${EMPTY}s"
 BAR="${FILL// /█}${PAD// /░}"
 
-MINS=$((DURATION_MS / 60000)); SECS=$(((DURATION_MS % 60000) / 1000))
+TOTAL_SEC=$((DURATION_MS / 1000))
+HOURS=$((TOTAL_SEC / 3600))
+MINS=$(((TOTAL_SEC % 3600) / 60))
+SECS=$((TOTAL_SEC % 60))
+if [ "$HOURS" -gt 0 ]; then
+  DUR="${HOURS}h ${MINS}m ${SECS}s"
+else
+  DUR="${MINS}m ${SECS}s"
+fi
 
 BRANCH=""
 git rev-parse --git-dir > /dev/null 2>&1 && BRANCH=" | 🌿 $(git branch --show-current 2>/dev/null)"
 
 echo -e "${CYAN}[$MODEL]${RESET} 📁 ${DIR}$BRANCH"
 COST_FMT=$(printf '$%.2f' "$COST")
-echo -e "${BAR_COLOR}${BAR}${RESET} ${PCT}% | ${YELLOW}${COST_FMT}${RESET} | ⏱️ ${MINS}m ${SECS}s"
+echo -e "${BAR_COLOR}${BAR}${RESET} ${PCT}% | ${YELLOW}${COST_FMT}${RESET} | ⏱️ ${DUR}"
