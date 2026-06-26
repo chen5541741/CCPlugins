@@ -193,21 +193,21 @@ else
   TYPE_VALUE="$TYPE_PLAIN"
 fi
 
-PAYLOAD="$(
-  jq -n \
+# jq -c：紧凑输出，结构无空白，避免 Windows CRT text mode 在空白处插 \r
+# tr -d '\r'：兜底去掉 jq stdout 可能注入的 CR（仅 Windows 出现，*nix 无副作用）
+# curl --data-binary @-：通过 stdin 传 body，逐字节透传，避开 --data 对 \n 的特殊处理
+RESP="$(
+  jq -cn \
     --argjson type "$TYPE_VALUE" \
     --arg target_id "$TARGET_ID" \
     --arg content "$MESSAGE" \
-    '{type: $type, target_id: $target_id, content: $content}'
-)"
-
-# ----- 发起请求 -----
-RESP="$(
-  curl --silent --show-error --max-time "$TIMEOUT" \
-    -X POST "$URL" \
-    -H "Authorization: Bot $TOKEN" \
-    -H "Content-Type: application/json" \
-    --data "$PAYLOAD"
+    '{type: $type, target_id: $target_id, content: $content}' \
+  | tr -d '\r' \
+  | curl --silent --show-error --max-time "$TIMEOUT" \
+      -X POST "$URL" \
+      -H "Authorization: Bot $TOKEN" \
+      -H "Content-Type: application/json; charset=utf-8" \
+      --data-binary @-
 )" || die "网络请求失败 (curl 退出码 $?)"
 
 # ----- 解析返回 -----
