@@ -17,6 +17,12 @@
       "version": "0.1.0",
       "source": "./ThirdPart",
       "description": "ThirdPart - 第三方skill集合"
+    },
+    {
+      "name": "kook-notify",
+      "version": "0.1.0",
+      "source": "./kook-notify",
+      "description": "kook-notify - 通过 KOOK Bot 把 Claude Code 长任务完成、需要注意等事件单向推送到频道或私聊"
     }
   ]
 }
