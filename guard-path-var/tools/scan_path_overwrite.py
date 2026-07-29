@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 scan_path_overwrite.py
-遍历目录下的 Claude Code 会话 jsonl 日志，定位 "path 环境变量被覆盖" 问题。
+遍历目录下的 Claude Code 会话 jsonl 日志，定位 "path 环境变量被覆盖" 问题，
+并验证 hook 防护是否生效。
 
 问题原理
 --------
@@ -10,14 +11,22 @@ scan_path_overwrite.py
 当作变量名（典型：`for path in ...`），第一轮迭代就会把 PATH 覆盖成单个目录，
 导致 curl/grep/head/python3 等大量报 "command not found"。
 
-判定逻辑（双特征关联）
+判定逻辑（三特征：危险模式 / 被拦截 / 症状）
 --------
   - danger  : 命令文本里出现 path 变量赋值模式
               （for/select path、read path、裸 path=）
-  - symptom : 该调用的 tool_result 里出现 command-not-found 类错误
-  - CONFIRMED = danger 且 symptom   —— 强证据，就是这个问题
-  - POTENTIAL = 仅 danger            —— 触发了，但日志未记录症状 / 被绝对路径等规避
-  - SUSPECT   = 仅 symptom           —— command not found 但无 path 模式，原因待查
+  - denied  : 该调用被拒绝执行 —— 顶层字段 toolDenialKind 非空（结构化，最可靠），
+              或 result 文本含 hook 阻断特征词（文本兜底）
+  - symptom : result 里出现 command-not-found 类错误
+              （注意：被拦截时 symptom 强制为假，因为 hook 阻断文本里也写了
+               "command not found" 这个词作为解释，不能算真症状）
+
+四态分类
+--------
+  - HOOKED    : danger 且 denied   —— hook 防护生效，命令被拦截，未执行
+  - LEAKED    : danger 且 symptom  —— 命令真的执行并破坏了 PATH（hook 漏网 / 未装 hook）
+  - POTENTIAL : 仅 danger          —— 危险模式，但既未被拦截也未观察到症状
+  - SUSPECT   : 仅 symptom         —— command not found 但无 path 模式，原因待查
 
 用法
 --------
@@ -25,7 +34,7 @@ scan_path_overwrite.py
 
   选项：
     --json PATH       额外把结构化报告写入该 JSON 文件
-    --show-all        同时显示 POTENTIAL / SUSPECT（默认只显示 CONFIRMED）
+    --show-all        同时显示 POTENTIAL / SUSPECT（默认只显示 HOOKED / LEAKED）
     --jobs N          并行进程数，默认 1
     --max N           每类详情最多显示条数，默认 50
 """
@@ -61,6 +70,14 @@ SYMPTOM_PATTERNS = [
     re.compile(r"Command '[^']+' is available in the following places", re.IGNORECASE),
 ]
 
+# hook 阻断文本兜底特征（toolDenialKind 缺失时用）
+HOOK_TEXT_PATTERNS = [
+    re.compile(r"typeset -T PATH path"),
+    re.compile(r"tied to uppercase", re.IGNORECASE),
+    re.compile(r"Rename the variable", re.IGNORECASE),
+    re.compile(r"overwrites PATH", re.IGNORECASE),
+]
+
 
 def match_danger(cmd):
     return [name for rx, name in DANGER_PATTERNS if rx.search(cmd)]
@@ -72,9 +89,17 @@ def match_symptoms(text):
         m = rx.search(text)
         if m:
             hits.append(m.group(0).strip().replace("\n", " "))
-    # 提取 command-not-found 涉及的命令名（如 curl、head）
     names = re.findall(r"Command '([^']+)' is available in the following places", text)
     return hits, names
+
+
+def is_denied(obj, text):
+    """该 tool_result 所在记录是否表示命令被拒绝执行。"""
+    if obj.get("toolDenialKind"):   # 结构化字段，最可靠（如 'permission-rule' / 'hook'）
+        return True
+    if any(rx.search(text) for rx in HOOK_TEXT_PATTERNS):
+        return True
+    return False
 
 
 def danger_line(cmd):
@@ -116,7 +141,7 @@ def scan_file(path):
     """扫描单个 jsonl 文件。返回 (findings_list, error_or_None)。"""
     findings = []
     bash_uses = {}   # tool_use_id -> 元信息
-    results = {}     # tool_use_id -> result 文本
+    results = {}     # tool_use_id -> {text, denied, denial_kind, is_error}
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for lineno, line in enumerate(f, 1):
@@ -150,27 +175,40 @@ def scan_file(path):
                     elif ctype == "tool_result":
                         tid = c.get("tool_use_id")
                         if tid:
-                            # 同一 id 可能多次出现，保留最长那份（更可能含症状）
                             txt = extract_text(c.get("content"))
-                            if len(txt) > len(results.get(tid, "")):
-                                results[tid] = txt
+                            rec = {
+                                "text": txt,
+                                "denied": is_denied(obj, txt),
+                                "denial_kind": obj.get("toolDenialKind"),
+                                "is_error": c.get("is_error"),
+                            }
+                            # 同一 id 可能多次出现，保留文本更长的那份
+                            if len(txt) >= len(results.get(tid, {}).get("text", "")):
+                                results[tid] = rec
     except Exception as e:
         return [], f"{path}: {e}"
 
     for tid, u in bash_uses.items():
         cmd = u["command"]
         danger = match_danger(cmd)
-        text = results.get(tid, "")
+        r = results.get(tid)
+        denied = bool(r and r["denied"])
+        text = r["text"] if r else ""
         sym_hits, sym_names = match_symptoms(text)
-        symptom = bool(sym_hits)
+        # 关键：被拦截时，拦截文本里的 "command not found" 字样不算真症状
+        symptom = (not denied) and bool(sym_hits)
+
         if not danger and not symptom:
-            continue
-        if danger and symptom:
-            sev = "CONFIRMED"
+            continue  # 与 path 问题无关（含「被拦截但非 path 命令」）
+        if danger and denied:
+            sev = "HOOKED"
+        elif danger and symptom:
+            sev = "LEAKED"
         elif danger:
             sev = "POTENTIAL"
         else:
             sev = "SUSPECT"
+
         findings.append({
             "severity": sev,
             "file": str(path),
@@ -182,15 +220,17 @@ def scan_file(path):
             "danger": danger,
             "danger_line": danger_line(cmd),
             "first_line": first_line(cmd),
-            "symptom_samples": sym_hits[:3],
-            "missing_commands": sym_names[:6],
+            "denied": denied,
+            "denial_kind": r.get("denial_kind") if r else None,
+            "symptom_samples": sym_hits[:3] if symptom else [],
+            "missing_commands": sym_names[:6] if symptom else [],
         })
     return findings, None
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="扫描 Claude Code jsonl 日志，定位 path 环境变量覆盖问题"
+        description="扫描 Claude Code jsonl 日志，定位 path 环境变量覆盖问题并验证 hook 防护"
     )
     ap.add_argument("directory", help="要扫描的目录（递归查找 *.jsonl）")
     ap.add_argument("--json", metavar="PATH", help="额外输出 JSON 报告到该文件")
@@ -228,29 +268,46 @@ def main():
                 continue
             all_findings.extend(fnds)
 
-    sev_order = {"CONFIRMED": 0, "POTENTIAL": 1, "SUSPECT": 2}
+    sev_order = {"HOOKED": 0, "LEAKED": 1, "POTENTIAL": 2, "SUSPECT": 3}
     all_findings.sort(key=lambda x: (sev_order.get(x["severity"], 9), x["file"], x["line"]))
     sev_cnt = Counter(f["severity"] for f in all_findings)
-    hit_files = {f["file"] for f in all_findings if f["severity"] == "CONFIRMED"}
+
+    hooked = sev_cnt.get("HOOKED", 0)
+    leaked = sev_cnt.get("LEAKED", 0)
+    potential = sev_cnt.get("POTENTIAL", 0)
+    suspect = sev_cnt.get("SUSPECT", 0)
+    # 防护有效率：在被拦截或漏网的 path 命令中，被拦截的占比
+    tried = hooked + leaked
+    eff = (hooked / tried * 100.0) if tried else None
 
     print("\n==== 汇总 ====")
     print(f"扫描文件数    : {len(files)}")
     print(f"读取异常文件  : {len(errors)}")
-    print(f"CONFIRMED     : {sev_cnt.get('CONFIRMED', 0)}  （危险模式 + 症状，强证据）涉及 {len(hit_files)} 个文件")
-    print(f"POTENTIAL     : {sev_cnt.get('POTENTIAL', 0)}  （仅危险模式，可能已触发）")
-    print(f"SUSPECT       : {sev_cnt.get('SUSPECT', 0)}  （仅 command not found，原因待查）")
+    print(f"HOOKED        : {hooked}  （hook 拦截成功，防护生效 ✓）")
+    print(f"LEAKED        : {leaked}  （命令真执行 + PATH 被破坏，hook 漏网/未装 ✗）")
+    print(f"POTENTIAL     : {potential}  （危险模式，但未拦截也未观察到症状）")
+    print(f"SUSPECT       : {suspect}  （command not found 但非 path 模式，原因待查）")
+    if tried:
+        print(f"path 危险命令 : 共 {tried} 次（拦截 {hooked} + 漏网 {leaked}），"
+              f"防护有效率 {eff:.1f}%")
+    else:
+        print("path 危险命令 : 0 次")
+    if leaked:
+        print(f"\n[!] 发现 {leaked} 处 LEAKED：hook 未拦住或未启用，需排查！")
     if errors:
         print(f"\n[警告] {len(errors)} 个文件读取异常（已跳过），示例:\n  {errors[0]}")
 
-    def show(level, limit):
+    def show(level, limit, banner_note=""):
         items = [f for f in all_findings if f["severity"] == level]
         if not items:
             return
-        print(f"\n==== {level} 详情（共 {len(items)} 条，显示前 {min(limit, len(items))}）====")
+        print(f"\n==== {level} 详情（共 {len(items)} 条，显示前 {min(limit, len(items))}）{banner_note} ====")
         for f in items[:limit]:
             print(f"\n[{Path(f['file']).name}]  行 {f['line']}    {f['timestamp']}")
             print(f"  会话     : {f['sessionId']}")
             print(f"  危险模式 : {', '.join(f['danger'])}")
+            if f.get("denial_kind"):
+                print(f"  拦截类型 : toolDenialKind={f['denial_kind']}")
             if f["missing_commands"]:
                 print(f"  丢失命令 : {', '.join(f['missing_commands'])}")
             if f["symptom_samples"]:
@@ -258,7 +315,9 @@ def main():
             print(f"  命令首行 : {f['first_line'][:70]}")
             print(f"  触发行   : {f['danger_line'][:70]}")
 
-    show("CONFIRMED", args.max)
+    # 默认显示 HOOKED 与 LEAKED；--show-all 再加 POTENTIAL / SUSPECT
+    show("HOOKED", args.max, "（防护生效）")
+    show("LEAKED", args.max, "（问题泄漏 ✗）")
     if args.show_all:
         show("POTENTIAL", args.max)
         show("SUSPECT", args.max)
@@ -266,7 +325,16 @@ def main():
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fp:
             json.dump(
-                {"summary": dict(sev_cnt), "findings": all_findings},
+                {
+                    "summary": {
+                        "files": len(files),
+                        "HOOKED": hooked, "LEAKED": leaked,
+                        "POTENTIAL": potential, "SUSPECT": suspect,
+                        "path_attempts": tried,
+                        "effectiveness_pct": round(eff, 1) if eff is not None else None,
+                    },
+                    "findings": all_findings,
+                },
                 fp, ensure_ascii=False, indent=2,
             )
         print(f"\nJSON 报告已写入: {args.json}")
