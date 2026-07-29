@@ -23,6 +23,12 @@
       "version": "0.1.0",
       "source": "./config-statusline",
       "description": "config-statusline - 一键安装本 plugin 自带的 statusline 脚本到 Claude Code，封装 /statusline 标准配置流程"
+    },
+    {
+      "name": "guard-path-var",
+      "version": "0.1.0",
+      "source": "./guard-path-var",
+      "description": "guard-path-var - PreToolUse 钩子，拦截 Bash 中将 'path' 用作变量名的危险模式（zsh 下覆盖 PATH），防止 command not found"
     }
   ]
 }

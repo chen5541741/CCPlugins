@@ -1,0 +1,18 @@
+{
+  "name": "guard-path-var",
+  "version": "0.1.0",
+  "description": "guard-path-var - PreToolUse hook 拦截 Bash 调用中将 'path' 用作变量名的危险模式（zsh 中 path 数组与 PATH 标量绑定），防止 PATH 环境变量被意外覆盖导致 command not found",
+  "author": {
+    "name": "nearl"
+  },
+  "keywords": [
+    "path",
+    "environment",
+    "hook",
+    "guard",
+    "zsh",
+    "bash",
+    "claude-code",
+    "pre-tool-use"
+  ]
+}
